@@ -6,8 +6,8 @@ const { count } = defineProps<{
 const num = defineModel<number>({ required: true })
 
 const setNum = (n: number) => {
-  if (num.value === n && n === 1) {
-    num.value = 0
+  if (num.value === n) {
+    num.value--
   } else {
     num.value = n
   }
