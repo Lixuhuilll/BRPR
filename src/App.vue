@@ -95,7 +95,7 @@ onMounted(async () => {
 }
 
 .divider {
-  height: 1px; /* 分割线的高度 */
+  height: 0.5vh; /* 分割线的高度 */
   background-color: #ccc; /* 分割线的颜色，可以根据需要调整 */
   margin-top: 7vh;
   margin-bottom: 4vh;
