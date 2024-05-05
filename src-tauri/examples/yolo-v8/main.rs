@@ -113,7 +113,7 @@ impl Task for YoloV8 {
         let w_ratio = initial_w as f32 / w as f32;
         let h_ratio = initial_h as f32 / h as f32;
         let mut img = img.to_rgb8();
-        let font = Vec::from(include_bytes!("roboto-mono-stripped.ttf") as &[u8]);
+        let font = Vec::from(include_bytes!("../roboto-mono-stripped.ttf") as &[u8]);
         let font = ab_glyph::FontRef::try_from_slice(&font).map_err(candle_core::Error::wrap)?;
         for (class_index, bboxes_for_class) in bboxes.iter().enumerate() {
             for b in bboxes_for_class.iter() {
