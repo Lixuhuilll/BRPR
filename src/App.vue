@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { appWindow } from '@tauri-apps/api/window'
 import { confirm } from '@tauri-apps/api/dialog'
-import { computed, onMounted, reactive } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import NumberSelector from './components/NumberSelector.vue'
+import { invoke } from '@tauri-apps/api/tauri'
 
 const bullets = reactive({
   real: parseInt(localStorage.getItem('real-bullets') ?? '0'),
@@ -56,12 +57,22 @@ onMounted(async () => {
   // 这样可以避免 tauri-plugin-window-state 导致窗口启动时闪动
   await appWindow.show()
 })
+
+const aiEnabled = ref(false)
+const switchAIEnabled = () => {
+  console.log('SwitchAIEnabled clicked.')
+  aiEnabled.value = !aiEnabled.value
+  invoke('set_ai_enabled', { enabled: aiEnabled.value })
+    .then(() => console.log('OK'))
+    .catch((err) => console.log(err))
+}
 </script>
 
 <template>
   <div class="container">
     <div class="bullet-item">
       <span class="left">{{ i18n.real }}</span>
+      <button @click="switchAIEnabled">切换 AI 功能</button>
       <span class="right">{{ i18n.quantity }}：{{ bullets.real }}</span>
     </div>
     <div class="bullet-item">
