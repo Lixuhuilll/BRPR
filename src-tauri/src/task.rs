@@ -80,6 +80,8 @@ fn yolo_v8_report(
     confidence_threshold: f32,
     nms_threshold: f32,
 ) -> anyhow::Result<BBoxes> {
+    // 将张量结果提取到内存
+    let pred = pred.to_device(&Device::Cpu)?;
     let (pred_size, npreds) = pred.dims2()?;
     let nclasses = pred_size - 4;
     // The bounding boxes grouped by (maximum) class index.
