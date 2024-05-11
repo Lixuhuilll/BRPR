@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { appWindow } from '@tauri-apps/api/window'
 import { confirm } from '@tauri-apps/api/dialog'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive } from 'vue'
 import NumberSelector from './components/NumberSelector.vue'
 import { invoke } from '@tauri-apps/api/tauri'
+import { listen } from '@tauri-apps/api/event'
 
 const bullets = reactive({
   real: parseInt(localStorage.getItem('real-bullets') ?? '0'),
@@ -53,26 +54,23 @@ onMounted(async () => {
       await appWindow.close()
     }
   })
+  // 监听子弹装填事件
+  await listen<[number, number]>('bullet-filling', (event) => {
+    bullets.real = event.payload[0]
+    bullets.empty = event.payload[1]
+  })
+  // 启动 AI
+  await invoke('set_ai_enabled', { enabled: true })
   // 在 tauri.conf.json 里配置窗口默认隐藏，等待页面准备好后再让窗口显示出来
   // 这样可以避免 tauri-plugin-window-state 导致窗口启动时闪动
   await appWindow.show()
 })
-
-const aiEnabled = ref(false)
-const switchAIEnabled = () => {
-  console.log('SwitchAIEnabled clicked.')
-  aiEnabled.value = !aiEnabled.value
-  invoke('set_ai_enabled', { enabled: aiEnabled.value })
-    .then(() => console.log('OK'))
-    .catch((err) => console.log(err))
-}
 </script>
 
 <template>
   <div class="container">
     <div class="bullet-item">
       <span class="left">{{ i18n.real }}</span>
-      <button @click="switchAIEnabled">切换 AI 功能</button>
       <span class="right">{{ i18n.quantity }}：{{ bullets.real }}</span>
     </div>
     <div class="bullet-item">
