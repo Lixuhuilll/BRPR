@@ -39,17 +39,32 @@ async fn ai_background_task(app: tauri::AppHandle) {
         if !ai_state.enabled || ai_state.identify_task.is_none() {
             continue;
         }
+
+        // 状态码不为 0 则自动通知前端
+        struct AutoEmit<'a>(u8, &'a tauri::AppHandle);
+        impl Drop for AutoEmit<'_> {
+            fn drop(&mut self) {
+                let event = match self.0 {
+                    1 => "screenshot-failed",
+                    2 => "identify-failed",
+                    _ => {
+                        return;
+                    }
+                };
+                if self.1.emit_all(event, ()).is_err() {
+                    error!("Emit failed.");
+                }
+            }
+        }
+        // 初始认为截图异常
+        let mut auto_emit = AutoEmit(1, &app);
+
         // 首次执行时获取窗口句柄
         let window = match ai_state.window.as_ref() {
             Some(window) => window,
             None => match ai_state.find_and_set_window() {
                 Some(window) => window,
-                None => {
-                    if app.emit_all("window-get-failed", ()).is_err() {
-                        error!("Emit failed.");
-                    }
-                    continue;
-                }
+                None => continue,
             },
         };
         let image = match screenshot(window) {
@@ -58,64 +73,56 @@ async fn ai_background_task(app: tauri::AppHandle) {
                 // 截图失败可能是窗口句柄失效，重新获取窗口并截图
                 let window = match ai_state.find_and_set_window() {
                     Some(window) => window,
-                    None => {
-                        if app.emit_all("window-get-failed", ()).is_err() {
-                            error!("Emit failed.");
-                        }
-                        continue;
-                    }
+                    None => continue,
                 };
                 match screenshot(window) {
                     Ok(image) => image,
-                    Err(_) => {
-                        if app.emit_all("screenshot-failed", ()).is_err() {
-                            error!("Emit failed.");
-                        }
-                        continue;
-                    }
+                    Err(_) => continue,
                 }
             }
         };
+        // 截图完毕，认为识别异常
+        auto_emit.0 = 2;
+
         let identify_task = ai_state.identify_task.as_ref().unwrap();
-        match identify_task.identify(image) {
-            Ok(mut result) => {
-                if let [reals, emptys, .., display] = &mut result[..] {
-                    // 有且只有一个弹药展示区域
-                    if display.len() != 1 {
-                        continue;
-                    }
-                    let display = &display[0];
-                    let check_bullet = |bbox: &Bbox<Vec<KeyPoint>>| {
-                        let mid_x = bbox.xmin / 2. + bbox.xmax / 2.;
-                        let mid_y = bbox.ymin / 2. + bbox.ymax / 2.;
-                        if mid_x >= display.xmin
-                            && mid_x <= display.xmax
-                            && mid_y >= display.ymin
-                            && mid_y <= display.ymax
-                        {
-                            true
-                        } else {
-                            false
-                        }
-                    };
-                    reals.retain(check_bullet);
-                    emptys.retain(check_bullet);
-                    // Bullet must greater than or equal to 2.
-                    if reals.len() + emptys.len() < 2 {
-                        continue;
-                    }
-                    if app
-                        .emit_all("bullet-filling", [reals.len(), emptys.len()])
-                        .is_err()
-                    {
-                        error!("Emit failed.");
-                    }
-                }
+        let result = identify_task.identify(image);
+
+        if result.is_err() {
+            continue;
+        }
+
+        if let [reals, emptys, .., display] = result.unwrap().as_mut_slice() {
+            // 有且只有一个弹药展示区域
+            if display.len() != 1 {
+                continue;
             }
-            Err(_) => {
-                if app.emit_all("identify-failed", ()).is_err() {
-                    error!("Emit failed.");
+            let display = &display[0];
+            let check_bullet = |bbox: &Bbox<Vec<KeyPoint>>| {
+                let mid_x = bbox.xmin / 2. + bbox.xmax / 2.;
+                let mid_y = bbox.ymin / 2. + bbox.ymax / 2.;
+                if mid_x >= display.xmin
+                    && mid_x <= display.xmax
+                    && mid_y >= display.ymin
+                    && mid_y <= display.ymax
+                {
+                    true
+                } else {
+                    false
                 }
+            };
+            reals.retain(check_bullet);
+            emptys.retain(check_bullet);
+            // Bullet must greater than or equal to 2.
+            if reals.len() + emptys.len() < 2 {
+                continue;
+            }
+            // 识别成功，认为无错误
+            auto_emit.0 = 0;
+            if app
+                .emit_all("bullet-filling", [reals.len(), emptys.len()])
+                .is_err()
+            {
+                error!("Emit failed.");
             }
         }
     }
