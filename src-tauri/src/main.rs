@@ -30,6 +30,7 @@ impl AIState {
 async fn ai_background_task(app: tauri::AppHandle) {
     let ai_state = app.state::<Mutex<AIState>>();
     let mut intv = tokio::time::interval(tokio::time::Duration::from_millis(1000));
+    let mut max_bullet = [0; 2];
 
     loop {
         // 保持间隔执行
@@ -91,7 +92,7 @@ async fn ai_background_task(app: tauri::AppHandle) {
             continue;
         }
 
-        if let [reals, emptys, .., display] = result.unwrap().as_mut_slice() {
+        if let [reals, empties, .., display] = result.unwrap().as_mut_slice() {
             // 有且只有一个弹药展示区域
             if display.len() != 1 {
                 continue;
@@ -111,17 +112,18 @@ async fn ai_background_task(app: tauri::AppHandle) {
                 }
             };
             reals.retain(check_bullet);
-            emptys.retain(check_bullet);
+            empties.retain(check_bullet);
             // Bullet must greater than or equal to 2.
-            if reals.len() + emptys.len() < 2 {
+            if reals.len() + empties.len() < 2 {
+                max_bullet.fill_with(|| 0);
                 continue;
             }
             // 识别成功，认为无错误
             auto_emit.0 = 0;
-            if app
-                .emit_all("bullet-filling", [reals.len(), emptys.len()])
-                .is_err()
-            {
+            // 减少误判（子弹展示到退出展示这个过程中，子弹数量呈现 少 -> 全部 -> 少 的变化）
+            max_bullet[0] = std::cmp::max(max_bullet[0], reals.len());
+            max_bullet[1] = std::cmp::max(max_bullet[1], empties.len());
+            if app.emit_all("bullet-filling", max_bullet).is_err() {
                 error!("Emit failed.");
             }
         }
