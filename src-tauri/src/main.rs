@@ -115,7 +115,7 @@ async fn ai_background_task(app: tauri::AppHandle) {
             empties.retain(check_bullet);
             // Bullet must greater than or equal to 2.
             if reals.len() + empties.len() < 2 {
-                max_bullet.fill_with(|| 0);
+                max_bullet.fill(0);
                 continue;
             }
             // 识别成功，认为无错误
