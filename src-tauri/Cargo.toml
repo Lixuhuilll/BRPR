@@ -41,7 +41,16 @@ tauri = { version = "1", features = ["dialog-confirm", "window-close", "window-s
 tauri-plugin-window-state = "0.1.1"
 tokio = { version = "1", features = ["time"] }
 tracing = "0.1.40"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 xcap = "0.0.9"
+
+[target."cfg(windows)".dependencies.ort]
+version = "2.0.0-rc.2"
+features = ["load-dynamic", "directml"]
+
+[target."cfg(windows)".dependencies.windows-sys]
+version = "0.52"
+features = ["Win32_Foundation", "Win32_System_LibraryLoader"]
 
 [features]
 # This feature is used for production builds or when a dev server is not specified, DO NOT REMOVE!!

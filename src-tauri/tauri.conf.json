@@ -48,7 +48,8 @@
         "icons/icon.ico"
       ],
       "resources": [
-        "model/yolov8n_imgsz640.safetensors"
+        "models/*",
+        "runtimes/*"
       ],
       "windows": {
         "nsis": {

@@ -4,6 +4,7 @@
 use std::sync::Mutex;
 
 use candle_transformers::object_detection::{Bbox, KeyPoint};
+use ort::{DirectMLExecutionProvider, GraphOptimizationLevel, Session};
 use tauri::Manager;
 use tracing::error;
 use xcap::Window;
@@ -140,7 +141,7 @@ async fn set_ai_enabled(enabled: bool, app: tauri::AppHandle) -> Result<(), Stri
         // 首次启用需要载入模型
         let model_path = app
             .path_resolver()
-            .resolve_resource("model/yolov8n_imgsz640.safetensors")
+            .resolve_resource("models/yolov8n_imgsz640.safetensors")
             .ok_or("Failed to resolve model resource.")?;
         match IdentifyModel::<YoloV8>::load(&model_path).map_err(|err| err.to_string()) {
             Ok(model) => ai_state.identify_task = Some(Box::new(model)),
@@ -159,6 +160,16 @@ async fn set_ai_enabled(enabled: bool, app: tauri::AppHandle) -> Result<(), Stri
 }
 
 fn main() {
+    tracing_subscriber::fmt::init();
+
+    #[cfg(windows)]
+    {
+        use windows_sys::s;
+        use windows_sys::Win32::System::LibraryLoader::SetDllDirectoryA;
+
+        unsafe { SetDllDirectoryA(s!("runtimes")); }
+    }
+
     let ai_state = Mutex::new(AIState {
         enabled: false,
         identify_task: None,
@@ -166,6 +177,22 @@ fn main() {
     });
 
     tauri::Builder::default()
+        .setup(|app| {
+            ort::init()
+                .with_execution_providers([DirectMLExecutionProvider::default().build()])
+                .commit()?;
+
+            let model_path = app
+                .path_resolver()
+                .resolve_resource("models/yolov8n_imgsz640_fp16.onnx")
+                .ok_or("Failed to resolve model")?;
+
+            let model = Session::builder()?
+                .with_optimization_level(GraphOptimizationLevel::Level3)?
+                .commit_from_file(model_path)?;
+
+            Ok(())
+        })
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(ai_state)
         .invoke_handler(tauri::generate_handler![set_ai_enabled])
