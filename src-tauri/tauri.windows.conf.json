@@ -2,6 +2,7 @@
   "tauri": {
     "bundle": {
       "resources": [
+        "models/*",
         "runtimes/*"
       ],
       "windows": {
