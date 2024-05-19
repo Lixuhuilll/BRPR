@@ -4,7 +4,6 @@
 use std::sync::Mutex;
 
 use candle_transformers::object_detection::{Bbox, KeyPoint};
-use ort::{DirectMLExecutionProvider, GraphOptimizationLevel, Session};
 use tauri::Manager;
 use tracing::error;
 use xcap::Window;
@@ -162,25 +161,7 @@ async fn set_ai_enabled(enabled: bool, app: tauri::AppHandle) -> Result<(), Stri
 fn main() {
     tracing_subscriber::fmt::init();
 
-    #[cfg(windows)]
-    {
-        use windows_sys::s;
-        use windows_sys::Win32::System::LibraryLoader::SetDllDirectoryA;
-
-        unsafe {
-            SetDllDirectoryA(s!("runtimes"));
-        }
-    }
-
-    ort::init()
-        .with_execution_providers([
-            #[cfg(windows)]
-            {
-                DirectMLExecutionProvider::default().build()
-            },
-        ])
-        .commit()
-        .expect("Can not init onnxruntime");
+    onnx_init().expect("Can not init onnxruntime");
 
     let ai_state = Mutex::new(AIState {
         enabled: false,
