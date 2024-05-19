@@ -167,8 +167,20 @@ fn main() {
         use windows_sys::s;
         use windows_sys::Win32::System::LibraryLoader::SetDllDirectoryA;
 
-        unsafe { SetDllDirectoryA(s!("runtimes")); }
+        unsafe {
+            SetDllDirectoryA(s!("runtimes"));
+        }
     }
+
+    ort::init()
+        .with_execution_providers([
+            #[cfg(windows)]
+            {
+                DirectMLExecutionProvider::default().build()
+            },
+        ])
+        .commit()
+        .expect("Can not init onnxruntime");
 
     let ai_state = Mutex::new(AIState {
         enabled: false,
@@ -177,22 +189,6 @@ fn main() {
     });
 
     tauri::Builder::default()
-        .setup(|app| {
-            ort::init()
-                .with_execution_providers([DirectMLExecutionProvider::default().build()])
-                .commit()?;
-
-            let model_path = app
-                .path_resolver()
-                .resolve_resource("models/yolov8n_imgsz640_fp16.onnx")
-                .ok_or("Failed to resolve model")?;
-
-            let model = Session::builder()?
-                .with_optimization_level(GraphOptimizationLevel::Level3)?
-                .commit_from_file(model_path)?;
-
-            Ok(())
-        })
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(ai_state)
         .invoke_handler(tauri::generate_handler![set_ai_enabled])

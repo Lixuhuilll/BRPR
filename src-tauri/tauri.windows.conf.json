@@ -1,0 +1,18 @@
+{
+  "tauri": {
+    "bundle": {
+      "resources": [
+        "runtimes/*"
+      ],
+      "windows": {
+        "nsis": {
+          "languages": [
+            "SimpChinese",
+            "English"
+          ],
+          "license": "../LICENSE"
+        }
+      }
+    }
+  }
+}

@@ -16,7 +16,9 @@
         "confirm": true
       },
       "fs": {
-        "scope": ["$RESOURCE/*"]
+        "scope": [
+          "$RESOURCE/*"
+        ]
       },
       "window": {
         "close": true,
@@ -48,18 +50,8 @@
         "icons/icon.ico"
       ],
       "resources": [
-        "models/*",
-        "runtimes/*"
-      ],
-      "windows": {
-        "nsis": {
-          "languages": [
-            "SimpChinese",
-            "English"
-          ],
-          "license": "../LICENSE"
-        }
-      }
+        "models/*"
+      ]
     }
   }
 }
