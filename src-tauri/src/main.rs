@@ -7,14 +7,14 @@ use tauri::Manager;
 use tracing::error;
 use xcap::Window;
 
-use buckshot_roulette_projectile_recorder::task::IdentifyTask;
 use buckshot_roulette_projectile_recorder::utils::{
     find_br_window, screenshot, tracing_subscriber_init,
 };
+use buckshot_roulette_projectile_recorder::yolo_v8::{BoundingBox, YoloV8};
 
 struct AIState {
     enabled: bool,
-    identify_task: Option<Box<dyn for<'a> IdentifyTask<'a> + Send>>,
+    first_enabled: bool,
     window: Option<Window>,
 }
 
@@ -27,84 +27,119 @@ impl AIState {
     }
 }
 
+// 状态码不为 0 则自动通知前端
+struct AutoEmit<'a>(u8, &'a tauri::AppHandle);
+impl Drop for AutoEmit<'_> {
+    fn drop(&mut self) {
+        let event = match self.0 {
+            1 => "screenshot-failed",
+            2 => "identify-failed",
+            3 => "model-load-failed",
+            _ => {
+                return;
+            }
+        };
+        if self.1.emit_all(event, ()).is_err() {
+            error!("Emit failed.");
+        }
+    }
+}
+
 async fn ai_background_task(app: tauri::AppHandle) {
     let ai_state = app.state::<Mutex<AIState>>();
-    let mut intv = tokio::time::interval(tokio::time::Duration::from_millis(1000));
+    let mut intv = tokio::time::interval(tokio::time::Duration::from_millis(300));
     let mut max_bullet = [0; 2];
+    let mut model = None;
 
     loop {
         // 保持间隔执行
         intv.tick().await;
-        let mut ai_state = ai_state.lock().unwrap();
-        // AI 功能未启用或者识别任务未加载时，不继续执行
-        if !ai_state.enabled || ai_state.identify_task.is_none() {
-            continue;
-        }
 
-        // 状态码不为 0 则自动通知前端
-        struct AutoEmit<'a>(u8, &'a tauri::AppHandle);
-        impl Drop for AutoEmit<'_> {
-            fn drop(&mut self) {
-                let event = match self.0 {
-                    1 => "screenshot-failed",
-                    2 => "identify-failed",
-                    _ => {
-                        return;
+        // 初始认为模型载入异常
+        let mut auto_emit = AutoEmit(3, &app);
+
+        let image = {
+            let mut ai_state = ai_state.lock().unwrap();
+
+            // AI 功能未启用不继续执行
+            if !ai_state.enabled {
+                continue;
+            }
+
+            // 载入模型
+            if model.is_none() {
+                match app
+                    .path_resolver()
+                    .resolve_resource("models/yolov8n_imgsz640.onnx")
+                {
+                    Some(model_path) => match YoloV8::load(&model_path) {
+                        Ok(m) => model = Some(m),
+                        Err(msg) => {
+                            // 模型载入失败
+                            error!("{msg}");
+                            ai_state.enabled = false;
+                            continue;
+                        }
+                    },
+                    None => {
+                        error!("Failed to resolve model resource.");
+                        ai_state.enabled = false;
+                        continue;
                     }
-                };
-                if self.1.emit_all(event, ()).is_err() {
-                    error!("Emit failed.");
                 }
             }
-        }
-        // 初始认为截图异常
-        let mut auto_emit = AutoEmit(1, &app);
 
-        // 首次执行时获取窗口句柄
-        let window = match ai_state.window.as_ref() {
-            Some(window) => window,
-            None => match ai_state.find_and_set_window() {
+            // 模型载入完毕，认为截图异常
+            auto_emit.0 = 1;
+
+            // 首次执行时获取窗口句柄
+            let window = match ai_state.window.as_ref() {
                 Some(window) => window,
-                None => continue,
-            },
-        };
-        let image = match screenshot(window) {
-            Ok(image) => image,
-            Err(_) => {
-                // 截图失败可能是窗口句柄失效，重新获取窗口并截图
-                let window = match ai_state.find_and_set_window() {
+                None => match ai_state.find_and_set_window() {
                     Some(window) => window,
                     None => continue,
-                };
-                match screenshot(window) {
-                    Ok(image) => image,
-                    Err(_) => continue,
+                },
+            };
+            match screenshot(window) {
+                Ok(image) => image,
+                Err(_) => {
+                    // 截图失败可能是窗口句柄失效，重新获取窗口并截图
+                    let window = match ai_state.find_and_set_window() {
+                        Some(window) => window,
+                        None => continue,
+                    };
+                    match screenshot(window) {
+                        Ok(image) => image,
+                        Err(_) => continue,
+                    }
                 }
             }
         };
+
         // 截图完毕，认为识别异常
         auto_emit.0 = 2;
 
-        let identify_task = ai_state.identify_task.as_ref().unwrap();
-        let result = identify_task.identify(image);
+        let model = model.as_ref().unwrap();
+        let result = model.run_async(image).await;
 
         if result.is_err() {
             continue;
         }
-        /*
+
         if let [reals, empties, .., display] = result.unwrap().as_mut_slice() {
             // 有且只有一个弹药展示区域
             if display.len() != 1 {
                 continue;
             }
-            let display = &display[0];
-            let check_bullet = |bbox: &Bbox<Vec<KeyPoint>>| {
-                let mid_x = bbox.xmin / 2. + bbox.xmax / 2.;
-                let mid_y = bbox.ymin / 2. + bbox.ymax / 2.;
-                if mid_x >= display.xmin
-                    && mid_x <= display.xmax
-                    && mid_y >= display.ymin
-                    && mid_y <= display.ymax
+            let display = &display[0].0;
+            let check_bullet = |arg: &(BoundingBox, f32)| {
+                let bbox = &arg.0;
+                let mid_x = bbox.x1 / 2. + bbox.x2 / 2.;
+                let mid_y = bbox.y1 / 2. + bbox.y2 / 2.;
+                if mid_x >= display.x1
+                    && mid_x <= display.x2
+                    && mid_y >= display.y1
+                    && mid_y <= display.y2
                 {
                     true
                 } else {
@@ -126,7 +161,7 @@ async fn ai_background_task(app: tauri::AppHandle) {
             if app.emit_all("bullet-filling", max_bullet).is_err() {
                 error!("Emit failed.");
             }
-        }*/
+        }
     }
 }
 
@@ -136,20 +171,8 @@ async fn set_ai_enabled(enabled: bool, app: tauri::AppHandle) -> Result<(), Stri
     let mut ai_state = ai_state.lock().unwrap();
 
     ai_state.enabled = enabled;
-    if enabled && ai_state.identify_task.is_none() {
-        // 首次启用需要载入模型
-        let model_path = app
-            .path_resolver()
-            .resolve_resource("models/yolov8n_imgsz640.onnx")
-            .ok_or("Failed to resolve model resource.")?;
-        /*match IdentifyModel::<YoloV8>::load(&model_path).map_err(|err| err.to_string()) {
-            Ok(model) => ai_state.identify_task = Some(Box::new(model)),
-            Err(msg) => {
-                // 模型载入失败
-                ai_state.enabled = false;
-                return Err(msg);
-            }
-        }*/
+    if enabled && ai_state.first_enabled {
+        ai_state.first_enabled = false;
         // 提前销毁 ai_state 以便于转移 app 的所有权
         drop(ai_state);
         // 首次启用需要启动后台任务
@@ -163,7 +186,7 @@ fn main() {
 
     let ai_state = Mutex::new(AIState {
         enabled: false,
-        identify_task: None,
+        first_enabled: true,
         window: None,
     });
 

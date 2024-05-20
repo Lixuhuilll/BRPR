@@ -1,3 +1,2 @@
-pub mod br_classes;
-pub mod task;
 pub mod utils;
+pub mod yolo_v8;
