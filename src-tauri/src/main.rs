@@ -3,18 +3,18 @@
 
 use std::sync::Mutex;
 
-use candle_transformers::object_detection::{Bbox, KeyPoint};
 use tauri::Manager;
 use tracing::error;
 use xcap::Window;
 
-use buckshot_roulette_projectile_recorder::model::yolo_v8::YoloV8;
-use buckshot_roulette_projectile_recorder::screenshot::{find_br_window, screenshot};
-use buckshot_roulette_projectile_recorder::task::{IdentifyModel, IdentifyTask};
+use buckshot_roulette_projectile_recorder::task::IdentifyTask;
+use buckshot_roulette_projectile_recorder::utils::{
+    find_br_window, screenshot, tracing_subscriber_init,
+};
 
 struct AIState {
     enabled: bool,
-    identify_task: Option<Box<dyn IdentifyTask + Send>>,
+    identify_task: Option<Box<dyn for<'a> IdentifyTask<'a> + Send>>,
     window: Option<Window>,
 }
 
@@ -91,7 +91,7 @@ async fn ai_background_task(app: tauri::AppHandle) {
         if result.is_err() {
             continue;
         }
-
+        /*
         if let [reals, empties, .., display] = result.unwrap().as_mut_slice() {
             // 有且只有一个弹药展示区域
             if display.len() != 1 {
@@ -126,7 +126,7 @@ async fn ai_background_task(app: tauri::AppHandle) {
             if app.emit_all("bullet-filling", max_bullet).is_err() {
                 error!("Emit failed.");
             }
-        }
+        }*/
     }
 }
 
@@ -140,16 +140,16 @@ async fn set_ai_enabled(enabled: bool, app: tauri::AppHandle) -> Result<(), Stri
         // 首次启用需要载入模型
         let model_path = app
             .path_resolver()
-            .resolve_resource("models/yolov8n_imgsz640.safetensors")
+            .resolve_resource("models/yolov8n_imgsz640.onnx")
             .ok_or("Failed to resolve model resource.")?;
-        match IdentifyModel::<YoloV8>::load(&model_path).map_err(|err| err.to_string()) {
+        /*match IdentifyModel::<YoloV8>::load(&model_path).map_err(|err| err.to_string()) {
             Ok(model) => ai_state.identify_task = Some(Box::new(model)),
             Err(msg) => {
                 // 模型载入失败
                 ai_state.enabled = false;
                 return Err(msg);
             }
-        }
+        }*/
         // 提前销毁 ai_state 以便于转移 app 的所有权
         drop(ai_state);
         // 首次启用需要启动后台任务
@@ -159,9 +159,7 @@ async fn set_ai_enabled(enabled: bool, app: tauri::AppHandle) -> Result<(), Stri
 }
 
 fn main() {
-    tracing_subscriber::fmt::init();
-
-    onnx_init().expect("Can not init onnxruntime");
+    tracing_subscriber_init();
 
     let ai_state = Mutex::new(AIState {
         enabled: false,

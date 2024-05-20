@@ -51,7 +51,16 @@
       ],
       "resources": [
         "models/*"
-      ]
+      ],
+      "windows": {
+        "nsis": {
+          "languages": [
+            "SimpChinese",
+            "English"
+          ],
+          "license": "../LICENSE"
+        }
+      }
     }
   }
 }

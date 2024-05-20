@@ -16,46 +16,22 @@ lto = true # Enables link to optimizations
 opt-level = "s" # Optimize for binary size
 strip = true # Remove debug symbols
 
-# Dev-dependencies only used in testing, examples, benchmark
-[dev-dependencies]
-ab_glyph = "0.2.23"
-clap = { version = "4.2.4", features = ["derive"] }
-hf-hub = "0.3.0"
-image = { version = "0.25.0", default-features = false, features = ["jpeg", "png"] }
-imageproc = { version = "0.24.0", default-features = false }
-tracing-chrome = "0.7.1"
-tracing-subscriber = "0.3.7"
-
 [build-dependencies]
 tauri-build = { version = "1", features = [] }
 
 [dependencies]
 anyhow = { version = "1", features = ["backtrace"] }
-candle-core = "0.4.1"
-candle-nn = "0.4.1"
-candle-transformers = "0.4.1"
-half = "2.4.1"
 image = { version = "0.25.0", default-features = false }
 ndarray = "0.15.6"
+ort = { version = "2.0.0-rc.2", default-features = false, features = ["download-binaries", "ndarray"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "1", features = ["dialog-confirm", "window-close", "window-set-title", "window-show", "window-set-always-on-top"] }
 tauri-plugin-window-state = "0.1.1"
 tokio = { version = "1", features = ["time"] }
 tracing = "0.1.40"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 xcap = "0.0.9"
-
-[target."cfg(not(windows))".dependencies.ort]
-version = "2.0.0-rc.2"
-
-[target."cfg(windows)".dependencies.ort]
-version = "2.0.0-rc.2"
-features = ["load-dynamic", "directml"]
-
-[target."cfg(windows)".dependencies.windows-sys]
-version = "0.52"
-features = ["Win32_Foundation", "Win32_System_LibraryLoader"]
 
 [features]
 # This feature is used for production builds or when a dev server is not specified, DO NOT REMOVE!!
