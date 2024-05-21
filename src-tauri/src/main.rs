@@ -123,6 +123,7 @@ async fn ai_background_task(app: tauri::AppHandle) {
         let result = model.run_async(image).await;
 
         if result.is_err() {
+            error!("{}", result.unwrap_err());
             continue;
         }
 

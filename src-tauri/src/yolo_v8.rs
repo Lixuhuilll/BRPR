@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use image::imageops::FilterType;
+use fast_image_resize::{FilterType, ResizeAlg, ResizeOptions, Resizer};
 use image::{DynamicImage, GenericImageView};
 use ndarray::{s, Array, Axis, Dim, Ix};
 use ort::{inputs, GraphOptimizationLevel, Session, SessionOutputs};
@@ -35,8 +35,7 @@ impl YoloV8 {
         image: DynamicImage,
     ) -> anyhow::Result<Vec<Vec<(BoundingBox, f32)>>> {
         let (img_w, img_h) = (image.width(), image.height());
-        // TODO: 预处理有待优化，它有时甚至比 AI 推理更耗时
-        let input = Self::pre_processing(image);
+        let input = Self::pre_processing(image)?;
         // Run YOLOv8 inference
         let outputs = self
             .model
@@ -55,8 +54,15 @@ impl YoloV8 {
             - Self::intersection(box1, box2)
     }
 
-    fn pre_processing(image: DynamicImage) -> Array<f32, Dim<[Ix; 4]>> {
-        let img = image.resize_exact(640, 640, FilterType::CatmullRom);
+    fn pre_processing(image: DynamicImage) -> anyhow::Result<Array<f32, Dim<[Ix; 4]>>> {
+        let mut img = DynamicImage::new(640, 640, image.color());
+        let mut resizer = Resizer::new();
+        resizer.resize(
+            &image,
+            &mut img,
+            &ResizeOptions::new().resize_alg(ResizeAlg::Convolution(FilterType::CatmullRom)),
+        )?;
+
         let mut input = Array::zeros((1, 3, 640, 640));
         for pixel in img.pixels() {
             let x = pixel.0 as _;
@@ -66,7 +72,7 @@ impl YoloV8 {
             input[[0, 1, y, x]] = (g as f32) / 255.;
             input[[0, 2, y, x]] = (b as f32) / 255.;
         }
-        input
+        Ok(input)
     }
 
     fn post_processing(
