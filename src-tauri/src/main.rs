@@ -123,7 +123,7 @@ async fn ai_background_task(app: tauri::AppHandle) {
         // 截图完毕，认为识别异常
         auto_emit.0 = 2;
 
-        let model = model.as_ref().unwrap();
+        let model = model.as_mut().unwrap();
         let result = model.run_async(image).await;
 
         if result.is_err() {

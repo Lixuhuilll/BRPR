@@ -11,6 +11,8 @@ pub const YOLO_V8_CLASS_LABELS: [&str; 4] =
 #[derive(Debug)]
 pub struct YoloV8 {
     model: Session,
+    resizer: Resizer,
+    resize_options: ResizeOptions,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -28,16 +30,21 @@ impl YoloV8 {
             .with_optimization_level(GraphOptimizationLevel::Level3)?
             .commit_from_file(path)?;
 
-        Ok(Self { model })
+        Ok(Self {
+            model,
+            resizer: Resizer::new(),
+            resize_options: ResizeOptions::new()
+                .resize_alg(ResizeAlg::Convolution(FilterType::CatmullRom)),
+        })
     }
 
     /// 需要存在 ONNX 线程池且并行度至少为 2 ，否则 AI 推理必定执行错误
     pub async fn run_async(
-        &self,
+        &mut self,
         image: DynamicImage,
     ) -> anyhow::Result<Vec<Vec<(BoundingBox, f32)>>> {
         let (img_w, img_h) = (image.width(), image.height());
-        let input = Self::pre_processing(image)?;
+        let input = self.pre_processing(image)?;
         // Run YOLOv8 inference
         let outputs = self
             .model
@@ -56,14 +63,10 @@ impl YoloV8 {
             - Self::intersection(box1, box2)
     }
 
-    fn pre_processing(image: DynamicImage) -> anyhow::Result<Array<f32, Dim<[Ix; 4]>>> {
+    fn pre_processing(&mut self, image: DynamicImage) -> anyhow::Result<Array<f32, Dim<[Ix; 4]>>> {
         let mut img = DynamicImage::new(640, 640, image.color());
-        let mut resizer = Resizer::new();
-        resizer.resize(
-            &image,
-            &mut img,
-            &ResizeOptions::new().resize_alg(ResizeAlg::Convolution(FilterType::CatmullRom)),
-        )?;
+        self.resizer
+            .resize(&image, &mut img, &self.resize_options)?;
 
         let mut input = Array::zeros((1, 3, 640, 640));
         for pixel in img.pixels() {
