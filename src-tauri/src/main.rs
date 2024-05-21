@@ -8,10 +8,11 @@ use tracing::error;
 use xcap::Window;
 
 use buckshot_roulette_projectile_recorder::utils::{
-    find_br_window, screenshot, tracing_subscriber_init,
+    find_br_window, ort_init, screenshot, tracing_subscriber_init,
 };
 use buckshot_roulette_projectile_recorder::yolo_v8::{BoundingBox, YoloV8};
 
+#[derive(Debug, Default)]
 struct AIState {
     enabled: bool,
     first_enabled: bool,
@@ -47,7 +48,10 @@ impl Drop for AutoEmit<'_> {
 
 async fn ai_background_task(app: tauri::AppHandle) {
     let ai_state = app.state::<Mutex<AIState>>();
+
     let mut intv = tokio::time::interval(tokio::time::Duration::from_millis(300));
+    intv.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+
     let mut max_bullet = [0; 2];
     let mut model = None;
 
@@ -128,6 +132,8 @@ async fn ai_background_task(app: tauri::AppHandle) {
         }
 
         if let [reals, empties, .., display] = result.unwrap().as_mut_slice() {
+            // 识别成功，认为无错误
+            auto_emit.0 = 0;
             // 有且只有一个弹药展示区域
             if display.len() != 1 {
                 continue;
@@ -154,9 +160,10 @@ async fn ai_background_task(app: tauri::AppHandle) {
                 max_bullet.fill(0);
                 continue;
             }
-            // 识别成功，认为无错误
-            auto_emit.0 = 0;
             // 减少误判（子弹展示到退出展示这个过程中，子弹数量呈现 少 -> 全部 -> 少 的变化）
+            if max_bullet[0] >= reals.len() && max_bullet[1] >= empties.len() {
+                continue;
+            }
             max_bullet[0] = std::cmp::max(max_bullet[0], reals.len());
             max_bullet[1] = std::cmp::max(max_bullet[1], empties.len());
             if app.emit_all("bullet-filling", max_bullet).is_err() {
@@ -182,19 +189,20 @@ async fn set_ai_enabled(enabled: bool, app: tauri::AppHandle) -> Result<(), Stri
     Ok(())
 }
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     tracing_subscriber_init();
+    ort_init()?;
 
     let ai_state = Mutex::new(AIState {
-        enabled: false,
         first_enabled: true,
-        window: None,
+        ..Default::default()
     });
 
     tauri::Builder::default()
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(ai_state)
         .invoke_handler(tauri::generate_handler![set_ai_enabled])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .run(tauri::generate_context!())?;
+
+    Ok(())
 }

@@ -23,6 +23,7 @@ pub struct BoundingBox {
 
 impl YoloV8 {
     pub fn load(path: &Path) -> anyhow::Result<Self> {
+        // 如果不配置内部线程池且无全局线程池，默认创建一个使用全部 CPU 核心的线程池
         let model = Session::builder()?
             .with_optimization_level(GraphOptimizationLevel::Level3)?
             .commit_from_file(path)?;
@@ -30,6 +31,7 @@ impl YoloV8 {
         Ok(Self { model })
     }
 
+    /// 需要存在 ONNX 线程池且并行度至少为 2 ，否则 AI 推理必定执行错误
     pub async fn run_async(
         &self,
         image: DynamicImage,

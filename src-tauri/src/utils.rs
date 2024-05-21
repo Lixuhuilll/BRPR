@@ -1,5 +1,6 @@
 use anyhow::anyhow;
 use image::DynamicImage;
+use ort::EnvironmentGlobalThreadPoolOptions;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::EnvFilter;
 use xcap::Window;
@@ -31,4 +32,20 @@ pub fn tracing_subscriber_init() {
                 .from_env_lossy(),
         )
         .init();
+}
+
+pub fn ort_init() -> ort::Result<()> {
+    // 配置全局线程池
+    ort::init()
+        .with_global_thread_pool(EnvironmentGlobalThreadPoolOptions {
+            // intra 有两个特殊值：
+            // 0 = 使用默认线程数（CPU 的全部物理核心）
+            // 1 = 使用调用 run 函数的线程，不会在线程池中创建任何线程
+            // 因此想配合 run_async 使用至少应该配置为 2
+            intra_op_parallelism: Some(2),
+            // 禁止在任务队列为空时空转（禁用后推理速度可能变慢，但 CPU 占用会降低）
+            spin_control: Some(false),
+            ..Default::default()
+        })
+        .commit()
 }
