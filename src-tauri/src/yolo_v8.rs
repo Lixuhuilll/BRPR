@@ -33,8 +33,11 @@ impl YoloV8 {
         Ok(Self {
             model,
             resizer: Resizer::new(),
-            resize_options: ResizeOptions::new()
-                .resize_alg(ResizeAlg::Convolution(FilterType::CatmullRom)),
+            resize_options: ResizeOptions {
+                algorithm: ResizeAlg::Convolution(FilterType::CatmullRom),
+                mul_div_alpha: false,
+                ..Default::default()
+            },
         })
     }
 
